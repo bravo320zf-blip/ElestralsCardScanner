@@ -1,91 +1,172 @@
-<span id="nav-decks" onclick="showView('decks')">DECKS</span>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Death Forge: Elestrals Collector</title>
+    <style>
+        :root { --gold: #d4af37; --bg: #0f0f0f; --card-bg: #1a1a1a; --main-blue: #007bff; --spirit-purple: #8a2be2; }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; }
+        nav { display: flex; justify-content: space-around; background: #000; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold); }
+        nav span { cursor: pointer; font-weight: bold; color: #888; text-transform: uppercase; font-size: 0.8rem; }
+        nav span.active { color: var(--gold); }
+        .view { display: none; padding: 20px; padding-bottom: 80px; }
+        .view.active { display: block; }
+        
+        /* Scanner */
+        #video-container { position: relative; width: 100%; height: 60vh; background: #000; border-radius: 15px; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px dashed var(--gold); border-radius: 12px; pointer-events: none; }
+        
+        /* Grid Layouts */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; }
+        .card-item { background: var(--card-bg); border-radius: 10px; padding: 10px; border: 1px solid #333; position: relative; }
+        .card-item img { width: 100%; border-radius: 5px; }
+        .qty-badge { position: absolute; top: 5px; right: 5px; background: var(--gold); color: black; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; }
+        .price-tag { color: var(--gold); font-size: 0.9rem; font-weight: bold; margin-top: 5px; display: block; }
+        
+        /* Deck Builder */
+        .deck-list-item { background: #222; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); }
+        .btn { background: var(--gold); color: black; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; }
+        .share-btn { background: #444; color: white; padding: 5px 10px; font-size: 0.7rem; }
+    </style>
+</head>
+<body>
 
-<div id="view-decks" class="view">
-    <button onclick="createNewDeck()" style="width: 100%; padding: 10px; background: var(--elestral-gold); border: none; border-radius: 5px; font-weight: bold;">+ NEW DECK</button>
-    
-    <div id="deck-list" style="margin-top: 20px;">
-        </div>
-</div>
+    <nav>
+        <span id="nav-scan" class="active" onclick="showView('scan')">Scan</span>
+        <span id="nav-collection" onclick="showView('collection')">Collection</span>
+        <span id="nav-decks" onclick="showView('decks')">Decks</span>
+    </nav>
 
-<div id="deck-editor" class="view" style="background: var(--card-bg); padding: 15px; border-radius: 10px; margin: 10px;">
-    <h2 id="edit-deck-name">New Deck</h2>
-    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-        <div style="flex: 1;">
-            <h4 style="color: var(--elestral-gold);">Spirit Deck</h4>
-            <div id="spirit-deck-build"></div>
+    <div id="view-scan" class="view active">
+        <div id="video-container">
+            <video id="video" playsinline></video>
+            <div class="scan-overlay"></div>
         </div>
-        <div style="flex: 1;">
-            <h4 style="color: var(--elestral-gold);">Main Deck</h4>
-            <div id="main-deck-build"></div>
-        </div>
+        <button class="btn" style="margin-top: 20px;" onclick="simulateScan()">SCAN CARD</button>
+        <p style="text-align: center; font-size: 0.8rem; color: #888;">Align card within the frame to scan.</p>
     </div>
-    <button onclick="saveDeck()" style="background: green; color: white; border: none; padding: 10px; width: 100%;">SAVE DECK</button>
-</div>
 
-<script type="module">
-    // ... Previous Firebase Imports ...
-    import { addDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    <div id="view-collection" class="view">
+        <h3>My Collection</h3>
+        <div id="collection-grid" class="grid"></div>
+    </div>
 
-    // --- DECK LOGIC ---
-    
-    // Check if URL has a Deck ID (for sharing)
-    window.onload = () => {
+    <div id="view-decks" class="view">
+        <button class="btn" onclick="createNewDeck()">+ CREATE NEW DECK</button>
+        <div id="deck-list" style="margin-top: 20px;"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, increment, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // 🛑 REPLACE WITH YOUR FIREBASE CONFIG FROM STEP 1
+  const firebaseConfig = {
+    apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ",
+    authDomain: "elestralcardscanner.firebaseapp.com",
+    projectId: "elestralcardscanner",
+    storageBucket: "elestralcardscanner.firebasestorage.app",
+    messagingSenderId: "50825995351",
+    appId: "1:50825995351:web:8a8abde8c256fca22cef12",
+    measurementId: "G-1WFXZWZ668"
+  };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const USER_ID = "DeathTone"; // Your nickname
+
+        // --- NAVIGATION ---
+        window.showView = (v) => {
+            document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('nav span').forEach(el => el.classList.remove('active'));
+            document.getElementById(`view-${v}`).classList.add('active');
+            document.getElementById(`nav-${v}`).classList.add('active');
+        };
+
+        // --- CAMERA ---
+        const video = document.getElementById('video');
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => { video.srcObject = stream; video.play(); });
+
+        // --- CORE LOGIC ---
+        window.simulateScan = async () => {
+            // Logic placeholder: In a future update, we'll replace this with Image Hashing
+            const mockCardId = "BT01-001"; 
+            const cardData = {
+                name: "Adrestia",
+                id: mockCardId,
+                price: 15.40,
+                img: `https://collect.elestrals.com/assets/cards/${mockCardId}.png`
+            };
+
+            await setDoc(doc(db, "users", USER_ID, "collection", mockCardId), {
+                ...cardData,
+                quantity: increment(1),
+                updatedAt: new Date()
+            }, { merge: true });
+            alert("Card Scanned & Added!");
+        };
+
+        // Live Collection Sync
+        onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
+            const grid = document.getElementById('collection-grid');
+            grid.innerHTML = "";
+            snap.forEach(doc => {
+                const item = doc.data();
+                grid.innerHTML += `
+                    <div class="card-item">
+                        <span class="qty-badge">x${item.quantity}</span>
+                        <img src="${item.img}">
+                        <small>${item.name}</small>
+                        <span class="price-tag">$${item.price}</span>
+                    </div>`;
+            });
+        });
+
+        // --- DECK BUILDING & SHARING ---
+        window.createNewDeck = async () => {
+            const name = prompt("Deck Name?");
+            if(!name) return;
+            await addDoc(collection(db, "decks"), {
+                name: name,
+                creator: USER_ID,
+                spiritDeck: [],
+                mainDeck: [],
+                createdAt: new Date()
+            });
+        };
+
+        onSnapshot(collection(db, "decks"), (snap) => {
+            const list = document.getElementById('deck-list');
+            list.innerHTML = "";
+            snap.forEach(doc => {
+                const deck = doc.data();
+                if(deck.creator === USER_ID) {
+                    list.innerHTML += `
+                    <div class="deck-list-item">
+                        <div><strong>${deck.name}</strong></div>
+                        <button class="share-btn" onclick="shareDeck('${doc.id}')">SHARE LINK</button>
+                    </div>`;
+                }
+            });
+        });
+
+        window.shareDeck = (id) => {
+            const url = `${window.location.origin}${window.location.pathname}?deckId=${id}`;
+            navigator.clipboard.writeText(url);
+            alert("Deck link copied! Send this to your friends.");
+        };
+
+        // Handle Shared Link
         const urlParams = new URLSearchParams(window.location.search);
-        const sharedDeckId = urlParams.get('deck');
-        if (sharedDeckId) {
-            loadSharedDeck(sharedDeckId);
+        if(urlParams.has('deckId')) {
+            const id = urlParams.get('deckId');
+            getDoc(doc(db, "decks", id)).then(s => {
+                if(s.exists()) alert("Viewing Shared Deck: " + s.data().name);
+            });
         }
-    };
-
-    window.createNewDeck = async () => {
-        const name = prompt("Enter Deck Name:");
-        if (!name) return;
-        
-        const docRef = await addDoc(collection(db, "decks"), {
-            deckName: name,
-            creator: "DeathTone",
-            spiritDeck: [],
-            mainDeck: [],
-            createdAt: new Date()
-        });
-        
-        alert("Deck Created! Click to edit and add cards from your collection.");
-    };
-
-    // GENERATE SHARE LINK
-    window.shareDeck = (deckId) => {
-        const shareUrl = `${window.location.origin}${window.location.pathname}?deck=${deckId}`;
-        navigator.clipboard.writeText(shareUrl);
-        alert("Link copied to clipboard! Send it to your friends.");
-    };
-
-    async function loadSharedDeck(deckId) {
-        const docRef = doc(db, "decks", deckId);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            showView('gallery'); // Reuse gallery layout to show the shared deck
-            document.getElementById('gallery-status').innerText = `Viewing Shared Deck: ${data.deckName} by ${data.creator}`;
-            // Logic to render data.spiritDeck and data.mainDeck...
-        }
-    }
-    
-    // UI function to list decks
-    function renderDeckList(snapshot) {
-        const list = document.getElementById('deck-list');
-        list.innerHTML = "";
-        snapshot.forEach(doc => {
-            const deck = doc.data();
-            list.innerHTML += `
-                <div style="background:#333; padding:15px; margin-bottom:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <strong>${deck.deckName}</strong><br>
-                        <small>${deck.spiritDeck.length + deck.mainDeck.length} cards</small>
-                    </div>
-                    <button onclick="shareDeck('${doc.id}')" style="font-size:0.7rem;">SHARE</button>
-                </div>
-            `;
-        });
-    }
-</script>
+    </script>
+</body>
+</html>

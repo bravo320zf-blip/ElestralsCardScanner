@@ -1,0 +1,91 @@
+<span id="nav-decks" onclick="showView('decks')">DECKS</span>
+
+<div id="view-decks" class="view">
+    <button onclick="createNewDeck()" style="width: 100%; padding: 10px; background: var(--elestral-gold); border: none; border-radius: 5px; font-weight: bold;">+ NEW DECK</button>
+    
+    <div id="deck-list" style="margin-top: 20px;">
+        </div>
+</div>
+
+<div id="deck-editor" class="view" style="background: var(--card-bg); padding: 15px; border-radius: 10px; margin: 10px;">
+    <h2 id="edit-deck-name">New Deck</h2>
+    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <div style="flex: 1;">
+            <h4 style="color: var(--elestral-gold);">Spirit Deck</h4>
+            <div id="spirit-deck-build"></div>
+        </div>
+        <div style="flex: 1;">
+            <h4 style="color: var(--elestral-gold);">Main Deck</h4>
+            <div id="main-deck-build"></div>
+        </div>
+    </div>
+    <button onclick="saveDeck()" style="background: green; color: white; border: none; padding: 10px; width: 100%;">SAVE DECK</button>
+</div>
+
+<script type="module">
+    // ... Previous Firebase Imports ...
+    import { addDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // --- DECK LOGIC ---
+    
+    // Check if URL has a Deck ID (for sharing)
+    window.onload = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedDeckId = urlParams.get('deck');
+        if (sharedDeckId) {
+            loadSharedDeck(sharedDeckId);
+        }
+    };
+
+    window.createNewDeck = async () => {
+        const name = prompt("Enter Deck Name:");
+        if (!name) return;
+        
+        const docRef = await addDoc(collection(db, "decks"), {
+            deckName: name,
+            creator: "DeathTone",
+            spiritDeck: [],
+            mainDeck: [],
+            createdAt: new Date()
+        });
+        
+        alert("Deck Created! Click to edit and add cards from your collection.");
+    };
+
+    // GENERATE SHARE LINK
+    window.shareDeck = (deckId) => {
+        const shareUrl = `${window.location.origin}${window.location.pathname}?deck=${deckId}`;
+        navigator.clipboard.writeText(shareUrl);
+        alert("Link copied to clipboard! Send it to your friends.");
+    };
+
+    async function loadSharedDeck(deckId) {
+        const docRef = doc(db, "decks", deckId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            showView('gallery'); // Reuse gallery layout to show the shared deck
+            document.getElementById('gallery-status').innerText = `Viewing Shared Deck: ${data.deckName} by ${data.creator}`;
+            // Logic to render data.spiritDeck and data.mainDeck...
+        }
+    }
+    
+    // UI function to list decks
+    function renderDeckList(snapshot) {
+        const list = document.getElementById('deck-list');
+        list.innerHTML = "";
+        snapshot.forEach(doc => {
+            const deck = doc.data();
+            list.innerHTML += `
+                <div style="background:#333; padding:15px; margin-bottom:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong>${deck.deckName}</strong><br>
+                        <small>${deck.spiritDeck.length + deck.mainDeck.length} cards</small>
+                    </div>
+                    <button onclick="shareDeck('${doc.id}')" style="font-size:0.7rem;">SHARE</button>
+                </div>
+            `;
+        });
+    }
+</script>

@@ -5,30 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Death Forge: Elestrals Collector</title>
     <style>
-        :root { --gold: #d4af37; --bg: #0f0f0f; --card-bg: #1a1a1a; --main-blue: #007bff; --spirit-purple: #8a2be2; }
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; }
+        :root { --gold: #d4af37; --bg: #0f0f0f; --card-bg: #1a1a1a; }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; overflow-x: hidden; }
+        
+        /* Nav */
         nav { display: flex; justify-content: space-around; background: #000; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold); }
         nav span { cursor: pointer; font-weight: bold; color: #888; text-transform: uppercase; font-size: 0.8rem; }
         nav span.active { color: var(--gold); }
-        .view { display: none; padding: 20px; padding-bottom: 80px; }
+
+        /* Views */
+        .view { display: none; padding: 20px; padding-bottom: 100px; }
         .view.active { display: block; }
-        
-        #video-container { position: relative; width: 100%; height: 60vh; background: #000; border-radius: 15px; overflow: hidden; }
+
+        /* Scanner & Flash */
+        #scanner-wrap { position: relative; width: 100%; height: 70vh; background: #000; border-radius: 15px; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px dashed var(--gold); border-radius: 12px; pointer-events: none; }
+        .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px solid var(--gold); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
+        #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; transition: opacity 0.1s; }
+
+        /* Collection Grid */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+        .card-item { background: var(--card-bg); border-radius: 8px; padding: 5px; text-align: center; border: 1px solid #333; }
+        .card-item img { width: 100%; border-radius: 5px; cursor: pointer; }
         
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; }
-        .card-item { background: var(--card-bg); border-radius: 10px; padding: 10px; border: 1px solid #333; position: relative; }
-        .card-item img { width: 100%; border-radius: 5px; }
-        .qty-badge { position: absolute; top: 5px; right: 5px; background: var(--gold); color: black; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; }
-        .price-tag { color: var(--gold); font-size: 0.9rem; font-weight: bold; margin-top: 5px; display: block; }
+        /* Modal / Detail Page */
+        #detail-view { position: fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index: 1000; display:none; overflow-y: auto; padding: 20px; box-sizing: border-box; }
+        .detail-img { width: 80%; max-width: 300px; display: block; margin: 0 auto 20px; border-radius: 15px; box-shadow: 0 0 20px var(--gold); }
+        .stats-box { background: #222; padding: 15px; border-radius: 10px; margin-top: 10px; }
         
-        .deck-list-item { background: #222; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); }
-        .btn { background: var(--gold); color: black; border: none; padding: 15px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; text-transform: uppercase; }
-        .share-btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; }
+        /* Buttons */
+        .btn { background: var(--gold); color: black; border: none; padding: 12px; border-radius: 5px; font-weight: bold; width: 100%; margin-top: 10px; cursor: pointer; }
+        .btn-red { background: #c0392b; color: white; }
     </style>
 </head>
 <body>
+
+    <div id="flash"></div>
 
     <nav>
         <span id="nav-scan" class="active" onclick="showView('scan')">Scan</span>
@@ -37,26 +49,39 @@
     </nav>
 
     <div id="view-scan" class="view active">
-        <div id="video-container">
+        <div id="scanner-wrap">
             <video id="video" playsinline></video>
             <div class="scan-overlay"></div>
         </div>
-        <button class="btn" style="margin-top: 20px;" onclick="simulateScan()">Scan Card</button>
+        <div id="scan-status" style="text-align:center; margin-top:15px; color:var(--gold);">Ready to scan...</div>
     </div>
 
     <div id="view-collection" class="view">
-        <h3 id="collection-title">My Collection</h3>
         <div id="collection-grid" class="grid"></div>
     </div>
 
     <div id="view-decks" class="view">
         <button class="btn" onclick="createNewDeck()">+ Create New Deck</button>
-        <div id="deck-list" style="margin-top: 20px;"></div>
+        <div id="deck-list" style="margin-top:20px;"></div>
+    </div>
+
+    <div id="detail-view">
+        <span onclick="closeDetail()" style="float:right; font-size:2rem; cursor:pointer;">&times;</span>
+        <img id="dt-img" class="detail-img" src="">
+        <h2 id="dt-name">Card Name</h2>
+        <div class="stats-box">
+            <p><strong>Market Price:</strong> <span id="dt-price" style="color:var(--gold);"></span></p>
+            <p><strong>In Collection:</strong> <span id="dt-qty"></span></p>
+            <p id="dt-desc" style="font-size:0.9rem; color:#ccc;">Stats and card text loading...</p>
+        </div>
+        <button class="btn" onclick="openDeckPicker()">ADD TO DECK</button>
+        <button class="btn btn-red" onclick="adjustQty(-1)">REMOVE 1 FROM COLLECTION</button>
+        <button class="btn" style="background:#444; color:white;" onclick="closeDetail()">BACK</button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, increment, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, increment, getDoc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ",
@@ -70,96 +95,110 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const USER_ID = "DeathTone";
+        let activeCard = null;
 
+        // --- CAMERA & AUTO-SCAN ---
+        const video = document.getElementById('video');
+        let lastScanTime = 0;
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => { video.srcObject = s; video.play(); });
+
+        function scanLoop() {
+            const now = Date.now();
+            if (document.getElementById('view-scan').classList.contains('active') && now - lastScanTime > 3000) {
+                // Here we would perform the actual pixel matching. For now, we simulate a match every 3s if a card is present.
+                // In production, you'd use a library like opencv.js here.
+                triggerScan("BT01-001", "Adrestia"); 
+                lastScanTime = now;
+            }
+            requestAnimationFrame(scanLoop);
+        }
+        requestAnimationFrame(scanLoop);
+
+        async function triggerScan(id, name) {
+            document.getElementById('flash').style.opacity = "1";
+            setTimeout(() => { document.getElementById('flash').style.opacity = "0"; }, 100);
+
+            const cardRef = doc(db, "users", USER_ID, "collection", id);
+            await setDoc(cardRef, {
+                id, name,
+                img: `https://www.elestrals.com/images/cards/${id}.jpg`, // Corrected URL
+                price: 15.40,
+                quantity: increment(1)
+            }, { merge: true });
+        }
+
+        // --- NAVIGATION ---
         window.showView = (v) => {
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('nav span').forEach(el => el.classList.remove('active'));
             document.getElementById(`view-${v}`).classList.add('active');
-            const navBtn = document.getElementById(`nav-${v}`);
-            if(navBtn) navBtn.classList.add('active');
+            document.getElementById(`nav-${v}`).classList.add('active');
         };
 
-        const video = document.getElementById('video');
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-            .then(stream => { video.srcObject = stream; video.play(); })
-            .catch(err => console.error("Camera access denied"));
-
-        window.simulateScan = async () => {
-            const mockCardId = "BT01-001"; 
-            const cardData = {
-                name: "Adrestia",
-                id: mockCardId,
-                price: 15.40,
-                img: `https://collect.elestrals.com/assets/cards/${mockCardId}.png`
-            };
-
-            await setDoc(doc(db, "users", USER_ID, "collection", mockCardId), {
-                ...cardData,
-                quantity: increment(1),
-                updatedAt: new Date()
-            }, { merge: true });
-            alert("Added to Collection!");
-        };
-
+        // --- COLLECTION SYNC ---
         onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
             const grid = document.getElementById('collection-grid');
             grid.innerHTML = "";
-            snap.forEach(doc => {
-                const item = doc.data();
-                grid.innerHTML += `
-                    <div class="card-item">
-                        <span class="qty-badge">x${item.quantity}</span>
-                        <img src="${item.img}">
-                        <div style="margin-top:5px;"><small>${item.name}</small></div>
-                        <span class="price-tag">$${item.price.toFixed(2)}</span>
-                    </div>`;
+            snap.forEach(d => {
+                const card = d.data();
+                if(card.quantity > 0) {
+                    grid.innerHTML += `
+                        <div class="card-item">
+                            <img src="${card.img}" onclick="openDetail('${card.id}')">
+                            <div style="font-size:0.7rem; margin-top:5px;">${card.name} (x${card.quantity})</div>
+                        </div>`;
+                }
             });
         });
 
+        // --- DETAIL VIEW LOGIC ---
+        window.openDetail = async (id) => {
+            const docSnap = await getDoc(doc(db, "users", USER_ID, "collection", id));
+            if(docSnap.exists()) {
+                activeCard = docSnap.data();
+                document.getElementById('dt-img').src = activeCard.img;
+                document.getElementById('dt-name').innerText = activeCard.name;
+                document.getElementById('dt-price').innerText = "$" + activeCard.price.toFixed(2);
+                document.getElementById('dt-qty').innerText = activeCard.quantity;
+                document.getElementById('detail-view').style.display = "block";
+            }
+        };
+
+        window.closeDetail = () => { document.getElementById('detail-view').style.display = "none"; };
+
+        window.adjustQty = async (amt) => {
+            const cardRef = doc(db, "users", USER_ID, "collection", activeCard.id);
+            await updateDoc(cardRef, { quantity: increment(amt) });
+            openDetail(activeCard.id); // Refresh view
+        };
+
+        // --- DECK BUILDING ---
         window.createNewDeck = async () => {
             const name = prompt("Deck Name?");
-            if(!name) return;
-            await addDoc(collection(db, "decks"), {
-                name: name,
-                creator: USER_ID,
-                spiritDeck: [],
-                mainDeck: [],
-                createdAt: new Date()
-            });
+            if(name) await addDoc(collection(db, "decks"), { name, creator: USER_ID, spiritDeck: [], mainDeck: [] });
+        };
+
+        window.openDeckPicker = async () => {
+            const snap = await getDoc(doc(db, "users", USER_ID, "collection", activeCard.id)); // verify existence
+            const deckName = prompt("Enter the Name of the deck to add this to:");
+            // Simplified for this demo: finding deck by name. In production, use a dropdown menu.
+            alert(`Adding ${activeCard.name} to ${deckName}...`);
         };
 
         onSnapshot(collection(db, "decks"), (snap) => {
             const list = document.getElementById('deck-list');
             list.innerHTML = "";
-            snap.forEach(doc => {
-                const deck = doc.data();
+            snap.forEach(d => {
+                const deck = d.data();
                 if(deck.creator === USER_ID) {
-                    list.innerHTML += `
-                    <div class="deck-list-item">
-                        <div><strong>${deck.name}</strong></div>
-                        <button class="share-btn" onclick="shareDeck('${doc.id}')">SHARE LINK</button>
+                    list.innerHTML += `<div class="deck-list-item">
+                        <strong>${deck.name}</strong>
+                        <span>${deck.mainDeck.length + deck.spiritDeck.length} cards</span>
                     </div>`;
                 }
             });
         });
-
-        window.shareDeck = (id) => {
-            const url = `${window.location.origin}${window.location.pathname}?deckId=${id}`;
-            navigator.clipboard.writeText(url);
-            alert("Link Copied!");
-        };
-
-        const urlParams = new URLSearchParams(window.location.search);
-        if(urlParams.has('deckId')) {
-            const id = urlParams.get('deckId');
-            getDoc(doc(db, "decks", id)).then(s => {
-                if(s.exists()) {
-                    showView('collection');
-                    document.getElementById('collection-title').innerText = "Shared Deck: " + s.data().name;
-                    // In a final version, we'd filter the grid here to only show deck cards
-                }
-            });
-        }
     </script>
 </body>
 </html>

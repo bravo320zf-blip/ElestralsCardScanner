@@ -7,41 +7,26 @@
     <style>
         :root { --gold: #d4af37; --bg: #0f0f0f; --card-bg: #1a1a1a; }
         body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; overflow-x: hidden; }
-        
-        /* Nav */
         nav { display: flex; justify-content: space-around; background: #000; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold); }
         nav span { cursor: pointer; font-weight: bold; color: #888; text-transform: uppercase; font-size: 0.8rem; }
         nav span.active { color: var(--gold); }
-
-        /* Views */
         .view { display: none; padding: 20px; padding-bottom: 100px; }
         .view.active { display: block; }
-
-        /* Scanner & Flash */
-        #scanner-wrap { position: relative; width: 100%; height: 70vh; background: #000; border-radius: 15px; overflow: hidden; }
+        #scanner-wrap { position: relative; width: 100%; height: 65vh; background: #000; border-radius: 15px; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; }
         .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px solid var(--gold); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
-        #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; transition: opacity 0.1s; }
-
-        /* Collection Grid */
+        #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index: 10; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
         .card-item { background: var(--card-bg); border-radius: 8px; padding: 5px; text-align: center; border: 1px solid #333; }
-        .card-item img { width: 100%; border-radius: 5px; cursor: pointer; }
-        
-        /* Modal / Detail Page */
+        .card-item img { width: 100%; border-radius: 5px; cursor: pointer; min-height: 150px; background: #222; }
         #detail-view { position: fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index: 1000; display:none; overflow-y: auto; padding: 20px; box-sizing: border-box; }
-        .detail-img { width: 80%; max-width: 300px; display: block; margin: 0 auto 20px; border-radius: 15px; box-shadow: 0 0 20px var(--gold); }
-        .stats-box { background: #222; padding: 15px; border-radius: 10px; margin-top: 10px; }
-        
-        /* Buttons */
+        .detail-img { width: 85%; max-width: 320px; display: block; margin: 0 auto 20px; border-radius: 15px; box-shadow: 0 0 20px var(--gold); }
         .btn { background: var(--gold); color: black; border: none; padding: 12px; border-radius: 5px; font-weight: bold; width: 100%; margin-top: 10px; cursor: pointer; }
         .btn-red { background: #c0392b; color: white; }
     </style>
 </head>
 <body>
-
     <div id="flash"></div>
-
     <nav>
         <span id="nav-scan" class="active" onclick="showView('scan')">Scan</span>
         <span id="nav-collection" onclick="showView('collection')">Collection</span>
@@ -53,7 +38,7 @@
             <video id="video" playsinline></video>
             <div class="scan-overlay"></div>
         </div>
-        <div id="scan-status" style="text-align:center; margin-top:15px; color:var(--gold);">Ready to scan...</div>
+        <p style="text-align:center; color: var(--gold);">Auto-scanning active...</p>
     </div>
 
     <div id="view-collection" class="view">
@@ -68,15 +53,16 @@
     <div id="detail-view">
         <span onclick="closeDetail()" style="float:right; font-size:2rem; cursor:pointer;">&times;</span>
         <img id="dt-img" class="detail-img" src="">
-        <h2 id="dt-name">Card Name</h2>
-        <div class="stats-box">
-            <p><strong>Market Price:</strong> <span id="dt-price" style="color:var(--gold);"></span></p>
-            <p><strong>In Collection:</strong> <span id="dt-qty"></span></p>
-            <p id="dt-desc" style="font-size:0.9rem; color:#ccc;">Stats and card text loading...</p>
+        <h2 id="dt-name" style="text-align:center;"></h2>
+        <div style="background:#222; padding:15px; border-radius:10px;">
+            <p><strong>Market Price:</strong> <span id="dt-price" style="color:var(--gold);">Fetching...</span></p>
+            <p><strong>Quantity:</strong> <span id="dt-qty"></span></p>
+            <select id="deck-selector" class="btn" style="background:#333; color:white; border:1px solid var(--gold);">
+                <option value="">Select a Deck to Add...</option>
+            </select>
+            <button class="btn" onclick="addToSelectedDeck()">ADD TO DECK</button>
         </div>
-        <button class="btn" onclick="openDeckPicker()">ADD TO DECK</button>
         <button class="btn btn-red" onclick="adjustQty(-1)">REMOVE 1 FROM COLLECTION</button>
-        <button class="btn" style="background:#444; color:white;" onclick="closeDetail()">BACK</button>
     </div>
 
     <script type="module">
@@ -92,113 +78,119 @@
             appId: "1:50825995351:web:8a8abde8c256fca22cef12"
         };
 
+        const JUST_TCG_KEY = "tcg_b13ec49c98514734adacaae6ad57da50";
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const USER_ID = "DeathTone";
         let activeCard = null;
 
-        // --- CAMERA & AUTO-SCAN ---
+        // --- SCANNING ENGINE ---
         const video = document.getElementById('video');
-        let lastScanTime = 0;
+        let isProcessing = false;
 
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => { video.srcObject = s; video.play(); });
 
-        function scanLoop() {
-            const now = Date.now();
-            if (document.getElementById('view-scan').classList.contains('active') && now - lastScanTime > 3000) {
-                // Here we would perform the actual pixel matching. For now, we simulate a match every 3s if a card is present.
-                // In production, you'd use a library like opencv.js here.
-                triggerScan("BT01-001", "Adrestia"); 
-                lastScanTime = now;
-            }
-            requestAnimationFrame(scanLoop);
+        async function autoScan() {
+            if (isProcessing || !document.getElementById('view-scan').classList.contains('active')) return;
+            isProcessing = true;
+
+            // Mock Card ID for demonstration - replace with Image Hashing output
+            const detectedId = "BT01-001"; 
+            
+            try {
+                const response = await fetch(`https://api.justtcg.com/v1/cards/elestrals/${detectedId}`, {
+                    headers: { 'Authorization': `Bearer ${JUST_TCG_KEY}` }
+                });
+                const data = await response.json();
+
+                if(data) {
+                    flashScreen();
+                    await saveToCollection(data);
+                }
+            } catch (e) { console.error("API Error:", e); }
+
+            setTimeout(() => { isProcessing = false; }, 3000); // 3s cooldown
         }
-        requestAnimationFrame(scanLoop);
+        setInterval(autoScan, 1000);
 
-        async function triggerScan(id, name) {
-            document.getElementById('flash').style.opacity = "1";
-            setTimeout(() => { document.getElementById('flash').style.opacity = "0"; }, 100);
+        function flashScreen() {
+            const f = document.getElementById('flash');
+            f.style.opacity = "1";
+            setTimeout(() => f.style.opacity = "0", 150);
+        }
 
-            const cardRef = doc(db, "users", USER_ID, "collection", id);
+        async function saveToCollection(card) {
+            const cardRef = doc(db, "users", USER_ID, "collection", card.id);
             await setDoc(cardRef, {
-                id, name,
-                img: `https://www.elestrals.com/images/cards/${id}.jpg`, // Corrected URL
-                price: 15.40,
+                id: card.id,
+                name: card.name,
+                img: card.image_url || `https://collect.elestrals.com/assets/cards/${card.id}.png`,
+                price: card.market_price || 0.00,
                 quantity: increment(1)
             }, { merge: true });
         }
 
-        // --- NAVIGATION ---
+        // --- UI & DECKS ---
         window.showView = (v) => {
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('nav span').forEach(el => el.classList.remove('active'));
             document.getElementById(`view-${v}`).classList.add('active');
             document.getElementById(`nav-${v}`).classList.add('active');
+            if(v === 'decks') loadDeckOptions();
         };
 
-        // --- COLLECTION SYNC ---
+        window.openDetail = async (id) => {
+            const snap = await getDoc(doc(db, "users", USER_ID, "collection", id));
+            activeCard = snap.data();
+            document.getElementById('dt-img').src = activeCard.img;
+            document.getElementById('dt-name').innerText = activeCard.name;
+            document.getElementById('dt-qty').innerText = activeCard.quantity;
+            document.getElementById('dt-price').innerText = "$" + activeCard.price.toFixed(2);
+            document.getElementById('detail-view').style.display = "block";
+            loadDeckOptions();
+        };
+
+        async function loadDeckOptions() {
+            const selector = document.getElementById('deck-selector');
+            selector.innerHTML = '<option value="">Select a Deck...</option>';
+            onSnapshot(collection(db, "decks"), (snap) => {
+                snap.forEach(d => {
+                    if(d.data().creator === USER_ID) {
+                        selector.innerHTML += `<option value="${d.id}">${d.data().name}</option>`;
+                    }
+                });
+            });
+        }
+
+        window.addToSelectedDeck = async () => {
+            const deckId = document.getElementById('deck-selector').value;
+            if(!deckId) return alert("Select a deck first!");
+            const isSpirit = confirm("Add to Spirit Deck? (Cancel for Main Deck)");
+            const field = isSpirit ? "spiritDeck" : "mainDeck";
+            
+            await updateDoc(doc(db, "decks", deckId), {
+                [field]: arrayUnion(activeCard.id)
+            });
+            alert(`Added to ${isSpirit ? 'Spirit' : 'Main'} Deck!`);
+        };
+
+        window.closeDetail = () => document.getElementById('detail-view').style.display = "none";
+
         onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
             const grid = document.getElementById('collection-grid');
             grid.innerHTML = "";
             snap.forEach(d => {
                 const card = d.data();
                 if(card.quantity > 0) {
-                    grid.innerHTML += `
-                        <div class="card-item">
-                            <img src="${card.img}" onclick="openDetail('${card.id}')">
-                            <div style="font-size:0.7rem; margin-top:5px;">${card.name} (x${card.quantity})</div>
-                        </div>`;
+                    grid.innerHTML += `<div class="card-item"><img src="${card.img}" onclick="openDetail('${card.id}')"><div>x${card.quantity}</div></div>`;
                 }
             });
         });
 
-        // --- DETAIL VIEW LOGIC ---
-        window.openDetail = async (id) => {
-            const docSnap = await getDoc(doc(db, "users", USER_ID, "collection", id));
-            if(docSnap.exists()) {
-                activeCard = docSnap.data();
-                document.getElementById('dt-img').src = activeCard.img;
-                document.getElementById('dt-name').innerText = activeCard.name;
-                document.getElementById('dt-price').innerText = "$" + activeCard.price.toFixed(2);
-                document.getElementById('dt-qty').innerText = activeCard.quantity;
-                document.getElementById('detail-view').style.display = "block";
-            }
-        };
-
-        window.closeDetail = () => { document.getElementById('detail-view').style.display = "none"; };
-
-        window.adjustQty = async (amt) => {
-            const cardRef = doc(db, "users", USER_ID, "collection", activeCard.id);
-            await updateDoc(cardRef, { quantity: increment(amt) });
-            openDetail(activeCard.id); // Refresh view
-        };
-
-        // --- DECK BUILDING ---
         window.createNewDeck = async () => {
             const name = prompt("Deck Name?");
-            if(name) await addDoc(collection(db, "decks"), { name, creator: USER_ID, spiritDeck: [], mainDeck: [] });
+            if(name) await addDoc(collection(db, "decks"), { name, creator: USER_ID, spiritDeck: [], mainDeck: [], createdAt: new Date() });
         };
-
-        window.openDeckPicker = async () => {
-            const snap = await getDoc(doc(db, "users", USER_ID, "collection", activeCard.id)); // verify existence
-            const deckName = prompt("Enter the Name of the deck to add this to:");
-            // Simplified for this demo: finding deck by name. In production, use a dropdown menu.
-            alert(`Adding ${activeCard.name} to ${deckName}...`);
-        };
-
-        onSnapshot(collection(db, "decks"), (snap) => {
-            const list = document.getElementById('deck-list');
-            list.innerHTML = "";
-            snap.forEach(d => {
-                const deck = d.data();
-                if(deck.creator === USER_ID) {
-                    list.innerHTML += `<div class="deck-list-item">
-                        <strong>${deck.name}</strong>
-                        <span>${deck.mainDeck.length + deck.spiritDeck.length} cards</span>
-                    </div>`;
-                }
-            });
-        });
     </script>
 </body>
 </html>

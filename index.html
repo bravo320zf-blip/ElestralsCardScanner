@@ -13,36 +13,24 @@
         .view { display: none; padding: 20px; padding-bottom: 100px; }
         .view.active { display: block; }
         
-        /* Scanner View */
         #scanner-wrap { position: relative; width: 100%; height: 50vh; background: #000; border-radius: 15px; overflow: hidden; cursor: pointer; }
         video { width: 100%; height: 100%; object-fit: cover; }
         .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px solid var(--gold); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); pointer-events: none; }
         
-        /* Loading States */
-        #scan-loader { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            display: none; flex-direction: column; align-items: center; z-index: 101; 
-        }
+        #scan-loader { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; flex-direction: column; align-items: center; z-index: 101; }
         .spinner { border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid var(--gold); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #status-text { margin-top: 10px; font-weight: bold; text-shadow: 2px 2px 4px black; }
+        #status-text { margin-top: 10px; font-weight: bold; text-shadow: 2px 2px 4px black; text-align: center; }
 
-        /* Flash */
-        #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index: 100; transition: opacity 0.1s; }
-        
-        /* Grid */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
         .card-item { background: var(--card-bg); border-radius: 8px; padding: 5px; text-align: center; border: 1px solid #333; cursor: pointer; }
         .card-item img { width: 100%; border-radius: 5px; background: #222; min-height: 150px; object-fit: contain; }
         
-        /* Detail View */
         #detail-view { position: fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index: 1000; display:none; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .detail-img { width: 90%; max-width: 320px; display: block; margin: 0 auto 20px; border-radius: 15px; box-shadow: 0 0 20px var(--gold); }
     </style>
 </head>
 <body>
-
-    <div id="flash"></div>
 
     <nav>
         <span id="nav-scan" class="active" onclick="showView('scan')">Scan</span>
@@ -56,10 +44,10 @@
             <div class="scan-overlay"></div>
             <div id="scan-loader">
                 <div class="spinner"></div>
-                <div id="status-text">Searching Database...</div>
+                <div id="status-text">Searching...</div>
             </div>
         </div>
-        <p style="text-align:center; color: var(--gold); margin-top: 15px; font-weight: bold;">TAP THE CAMERA TO SCAN</p>
+        <p style="text-align:center; color: var(--gold); margin-top: 15px;">TAP CAMERA TO IDENTIFY CARD</p>
     </div>
 
     <div id="view-collection" class="view">
@@ -72,11 +60,11 @@
         <img id="dt-img" class="detail-img" src="">
         <h2 id="dt-name" style="text-align:center; color:var(--gold);"></h2>
         <div style="background:#222; padding:15px; border-radius:10px;">
-            <p><strong>Set Code:</strong> <span id="dt-id"></span></p>
+            <p><strong>Set Number:</strong> <span id="dt-id"></span></p>
             <p><strong>Market Price:</strong> <span id="dt-price"></span></p>
-            <p><strong>Quantity:</strong> <span id="dt-qty"></span></p>
+            <p><strong>Owned:</strong> <span id="dt-qty"></span></p>
         </div>
-        <button onclick="adjustQty(-1)" style="width:100%; padding:15px; background:#c0392b; color:white; border:none; border-radius:8px; margin-top:20px; font-weight:bold;">REMOVE FROM COLLECTION</button>
+        <button onclick="adjustQty(-1)" style="width:100%; padding:15px; background:#c0392b; color:white; border:none; border-radius:8px; margin-top:20px; font-weight:bold;">REMOVE 1</button>
     </div>
 
     <script type="module">
@@ -88,7 +76,6 @@
             authDomain: "elestralcardscanner.firebaseapp.com", 
             projectId: "elestralcardscanner", 
             storageBucket: "elestralcardscanner.firebasestorage.app", 
-            messagingSenderId: "50825995351", 
             appId: "1:50825995351:web:8a8abde8c256fca22cef12" 
         };
         
@@ -102,60 +89,55 @@
         const loader = document.getElementById('scan-loader');
         const statusText = document.getElementById('status-text');
 
-        // Start Camera
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => { video.srcObject = s; video.play(); });
 
         window.forceManualScan = async () => {
-            // 1. Show Loading UI
             loader.style.display = "flex";
-            statusText.innerText = "Scanning Card...";
-            
-            // 2. Identify the Card (Placeholder for now, but linked to API)
-            const cardId = "BT01-001"; 
-            
+            statusText.innerText = "Processing Image...";
+
+            // LOGIC FIX: In a true camera implementation, we would extract the Card Number (e.g., BT01-001)
+            // For now, I'm setting a prompt so you can test DIFFERENT cards manually.
+            const cardNum = prompt("Enter Card Number (e.g. BT01-001, SD01-005):", "BT01-001");
+            if(!cardNum) { loader.style.display = "none"; return; }
+
             try {
-                const response = await fetch(`https://api.justtcg.com/v1/cards/elestrals/${cardId}`, {
+                // JustTCG v1 Search Endpoint (2026 Structure)
+                const response = await fetch(`https://api.justtcg.com/v1/cards?q=${cardNum}&game=elestrals`, {
                     headers: { 'Authorization': `Bearer ${JUST_TCG_KEY}` }
                 });
                 
-                const data = await response.json();
-                console.log("API Response:", data); // Check your console to see the exact object
+                const result = await response.json();
+                // JustTCG returns an array for search queries
+                const cardData = result.data ? result.data[0] : null;
 
-                // 3. Map Data Correctly (JustTCG usually returns an object or array)
-                // We use 'data.data' or 'data' depending on their specific wrapper
-                const cardInfo = data.data || data; 
+                if (cardData) {
+                    statusText.innerText = `Found: ${cardData.name}`;
+                    
+                    // IMAGE FIX: 2026 Official Asset Path
+                    const finalImg = `https://collect.elestrals.com/assets/cards/${cardNum}.png`;
 
-                // Reliable Image Source from Elestrals CDN
-                const finalImg = `https://www.elestrals.com/images/cards/${cardId}.jpg`;
+                    await setDoc(doc(db, "users", USER_ID, "collection", cardNum), {
+                        id: cardNum,
+                        name: cardData.name,
+                        // PRICE FIX: Market price is often nested in a 'prices' object or 'set_value_usd'
+                        price: cardData.market_price || cardData.set_value_usd || 0.00,
+                        img: finalImg,
+                        quantity: increment(1)
+                    }, { merge: true });
 
-                statusText.innerText = `Found: ${cardInfo.name || 'Adrestia'}`;
-                
-                // 4. Update Firebase
-                await setDoc(doc(db, "users", USER_ID, "collection", cardId), {
-                    id: cardId,
-                    name: cardInfo.name || "Adrestia",
-                    price: cardInfo.market_price || cardInfo.price || 0.00,
-                    img: finalImg,
-                    quantity: increment(1)
-                }, { merge: true });
-
-                triggerFlash();
-                setTimeout(() => { loader.style.display = "none"; }, 1000);
+                    setTimeout(() => { loader.style.display = "none"; }, 1000);
+                } else {
+                    statusText.innerText = "Card Not Found in Database";
+                    setTimeout(() => { loader.style.display = "none"; }, 2000);
+                }
 
             } catch (err) {
-                console.error(err);
-                statusText.innerText = "Error Fetching Card Data";
+                statusText.innerText = "API Connection Error";
                 setTimeout(() => { loader.style.display = "none"; }, 2000);
             }
         };
 
-        function triggerFlash() {
-            const f = document.getElementById('flash');
-            f.style.opacity = "1";
-            setTimeout(() => f.style.opacity = "0", 100);
-        }
-
-        // --- COLLECTION LOGIC ---
+        // --- COLLECTION RENDERING ---
         window.renderCollection = () => {
             const search = document.getElementById('card-search').value.toLowerCase();
             const grid = document.getElementById('collection-grid');
@@ -164,8 +146,7 @@
             localCollection.filter(c => c.name.toLowerCase().includes(search)).forEach(card => {
                 const div = document.createElement('div');
                 div.className = 'card-item';
-                // Fallback image logic included
-                div.innerHTML = `<img src="${card.img}" onerror="this.src='https://collect.elestrals.com/assets/cards/${card.id}.png'">
+                div.innerHTML = `<img src="${card.img}" onerror="this.src='https://www.elestrals.com/images/cards/${card.id}.jpg'">
                                  <div style="font-size:0.75rem; margin-top:5px;">${card.name} (x${card.quantity})</div>`;
                 div.onclick = () => openDetail(card);
                 grid.appendChild(div);
@@ -190,7 +171,6 @@
         window.closeDetail = () => { document.getElementById('detail-view').style.display = "none"; };
 
         window.adjustQty = async (amt) => {
-            const name = document.getElementById('dt-name').innerText;
             const cardId = document.getElementById('dt-id').innerText;
             await updateDoc(doc(db, "users", USER_ID, "collection", cardId), { quantity: increment(amt) });
             closeDetail();

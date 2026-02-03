@@ -7,28 +7,49 @@
     <script async src="https://docs.opencv.org/4.5.4/opencv.js" type="text/javascript" onload="onOpenCvReady()"></script>
     <style>
         :root { --gold: #d4af37; --bg: #0f0f0f; --card-bg: #1a1a1a; }
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; overflow-x: hidden; }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; overflow: hidden; }
+        
+        /* Navigation */
         nav { display: flex; justify-content: space-around; background: #000; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold); }
         nav span { cursor: pointer; font-weight: bold; color: #888; text-transform: uppercase; font-size: 0.8rem; }
         nav span.active { color: var(--gold); }
         .view { display: none; padding: 20px; padding-bottom: 100px; }
         .view.active { display: block; }
         
-        /* Added cursor pointer to indicate touch-to-scan */
-        #scanner-wrap { position: relative; width: 100%; height: 60vh; background: #000; border-radius: 15px; overflow: hidden; cursor: crosshair; }
+        /* Scanner Wrap */
+        #scanner-wrap { position: relative; width: 100%; height: 65vh; background: #000; border-radius: 15px; overflow: hidden; cursor: crosshair; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #canvasOutput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.3; pointer-events: none; }
-        
+        #canvasOutput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.2; pointer-events: none; }
         .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px solid var(--gold); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); pointer-events: none; }
+        
+        /* Flash & Notifications */
         #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index: 100; transition: opacity 0.1s; }
         
+        .ghost-msg { 
+            position: absolute; bottom: 20%; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: var(--gold); padding: 12px 24px;
+            border-radius: 50px; border: 1px solid var(--gold); font-weight: bold;
+            z-index: 1000; pointer-events: none; animation: fadeUp 1.5s forwards;
+        }
+
+        @keyframes fadeUp {
+            0% { opacity: 0; transform: translate(-50%, 0); }
+            20% { opacity: 1; transform: translate(-50%, -20px); }
+            80% { opacity: 1; transform: translate(-50%, -20px); }
+            100% { opacity: 0; transform: translate(-50%, -40px); }
+        }
+
+        /* Collection Grid */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
         .card-item { background: var(--card-bg); border-radius: 8px; padding: 5px; text-align: center; border: 1px solid #333; }
         .card-item img { width: 100%; border-radius: 5px; cursor: pointer; min-height: 150px; background: #222; }
     </style>
 </head>
 <body>
+
     <div id="flash"></div>
+    <div id="notification-container"></div>
+
     <nav>
         <span id="nav-scan" class="active" onclick="showView('scan')">Scan</span>
         <span id="nav-collection" onclick="showView('collection')">Collection</span>
@@ -41,9 +62,18 @@
             <canvas id="canvasOutput"></canvas>
             <div class="scan-overlay"></div>
         </div>
-        <div id="status-indicator" style="text-align: center; margin-top: 10px; color: var(--gold);">
-            Smart Scan Active | Tap Screen to Force Scan
-        </div>
+        <p style="text-align:center; color: var(--gold); font-size: 0.9rem; margin-top: 10px;">
+            Tap center to force scan
+        </p>
+    </div>
+
+    <div id="view-collection" class="view">
+        <div id="collection-grid" class="grid"></div>
+    </div>
+
+    <div id="view-decks" class="view">
+        <button onclick="createNewDeck()" style="width:100%; padding:15px; background:var(--gold); border:none; font-weight:bold; border-radius:10px;">+ NEW DECK</button>
+        <div id="deck-list" style="margin-top:20px;"></div>
     </div>
 
     <script type="module">
@@ -66,92 +96,92 @@
         let cvReady = false, isProcessing = false, lastScannedId = null;
         const video = document.getElementById('video');
 
-        window.onOpenCvReady = () => { startScanning(); };
-
-        function startScanning() {
-            cvReady = true;
-            document.getElementById('status-indicator').innerText = "Scanner Ready: Tap to Scan";
-            startCapture();
-        }
+        window.onOpenCvReady = () => { cvReady = true; startCapture(); };
 
         async function startCapture() {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment" } 
-            });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             video.srcObject = stream;
             video.play();
             requestAnimationFrame(processFrame);
         }
 
-        // --- NEW: FORCE SCAN ON TOUCH ---
-        window.forceManualScan = () => {
-            console.log("Manual trigger activated.");
-            handleScan("BT01-001"); // In the final version, this will trigger the recognizer
-        };
+        window.forceManualScan = () => { handleScan("BT01-001"); };
 
         function processFrame() {
             if (!cvReady || isProcessing || !document.getElementById('view-scan').classList.contains('active')) {
                 requestAnimationFrame(processFrame);
                 return;
             }
-
+            // Basic OpenCV shape detection logic...
             let src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
             let cap = new cv.VideoCapture(video);
             cap.read(src);
-
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
             let thresh = new cv.Mat();
             cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
-
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
             cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-            cv.imshow('canvasOutput', thresh); 
-
             for (let i = 0; i < contours.size(); ++i) {
-                let cnt = contours.get(i);
-                if (cv.contourArea(cnt) > 40000) { 
+                if (cv.contourArea(contours.get(i)) > 45000) { 
                     isProcessing = true;
-                    handleScan("BT01-001"); 
+                    handleScan("BT01-001"); // Placeholder logic
                     break;
                 }
             }
-
             src.delete(); gray.delete(); thresh.delete(); contours.delete(); hierarchy.delete();
             requestAnimationFrame(processFrame);
         }
 
         async function handleScan(id) {
-            if (id === lastScannedId && !event) { // Only lock if it's an auto-scan
+            if (id === lastScannedId && !event) { 
                 setTimeout(() => isProcessing = false, 2000);
-                return;
+                return; 
             }
             
-            flashScreen();
+            triggerFlash();
+
             try {
                 const res = await fetch(`https://api.justtcg.com/v1/cards/elestrals/${id}`, { 
                     headers: { 'Authorization': `Bearer ${JUST_TCG_KEY}` } 
                 });
                 const card = await res.json();
-                if (card) {
-                    await setDoc(doc(db, "users", USER_ID, "collection", id), { 
-                        ...card, 
-                        img: card.image_url || `https://collect.elestrals.com/assets/cards/${id}.png`,
-                        quantity: increment(1) 
-                    }, { merge: true });
-                    lastScannedId = id;
-                }
-            } catch (e) { console.error("Scan Error:", e); }
+                
+                // Firestore save
+                const cardRef = doc(db, "users", USER_ID, "collection", id);
+                await setDoc(cardRef, { 
+                    id, 
+                    name: card.name || "Unknown Card", 
+                    img: card.image_url || `https://collect.elestrals.com/assets/cards/${id}.png`,
+                    price: card.market_price || 0.00,
+                    quantity: increment(1) 
+                }, { merge: true });
+
+                showGhostNotification(`Added: ${card.name || id}`);
+                lastScannedId = id;
+
+            } catch (e) { 
+                showGhostNotification("Scan Error: Check API/Connection");
+            }
             
-            setTimeout(() => isProcessing = false, 2500);
+            setTimeout(() => { isProcessing = false; }, 2500);
         }
 
-        function flashScreen() {
+        function triggerFlash() {
             const f = document.getElementById('flash');
             f.style.opacity = "1";
-            setTimeout(() => f.style.opacity = "0", 150);
+            setTimeout(() => f.style.opacity = "0", 100);
+        }
+
+        function showGhostNotification(text) {
+            const container = document.getElementById('notification-container');
+            const msg = document.createElement('div');
+            msg.className = 'ghost-msg';
+            msg.innerText = text;
+            container.appendChild(msg);
+            setTimeout(() => msg.remove(), 1500);
         }
 
         window.showView = (v) => {
@@ -160,6 +190,18 @@
             document.getElementById(`view-${v}`).classList.add('active');
             document.getElementById(`nav-${v}`).classList.add('active');
         };
+
+        // Live Collection Snapshot
+        onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
+            const grid = document.getElementById('collection-grid');
+            grid.innerHTML = "";
+            snap.forEach(d => {
+                const card = d.data();
+                if(card.quantity > 0) {
+                    grid.innerHTML += `<div class="card-item"><img src="${card.img}"><div>x${card.quantity}</div></div>`;
+                }
+            });
+        });
     </script>
 </body>
 </html>

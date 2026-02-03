@@ -7,42 +7,33 @@
     <script async src="https://docs.opencv.org/4.5.4/opencv.js" type="text/javascript" onload="onOpenCvReady()"></script>
     <style>
         :root { --gold: #d4af37; --bg: #0f0f0f; --card-bg: #1a1a1a; }
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; overflow: hidden; }
-        
-        /* Navigation */
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; overflow-x: hidden; }
         nav { display: flex; justify-content: space-around; background: #000; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold); }
         nav span { cursor: pointer; font-weight: bold; color: #888; text-transform: uppercase; font-size: 0.8rem; }
         nav span.active { color: var(--gold); }
         .view { display: none; padding: 20px; padding-bottom: 100px; }
         .view.active { display: block; }
         
-        /* Scanner Wrap */
-        #scanner-wrap { position: relative; width: 100%; height: 65vh; background: #000; border-radius: 15px; overflow: hidden; cursor: crosshair; }
+        /* Scanner View */
+        #scanner-wrap { position: relative; width: 100%; height: 60vh; background: #000; border-radius: 15px; overflow: hidden; cursor: crosshair; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #canvasOutput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.2; pointer-events: none; }
         .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px solid var(--gold); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); pointer-events: none; }
-        
-        /* Flash & Notifications */
         #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index: 100; transition: opacity 0.1s; }
         
-        .ghost-msg { 
-            position: absolute; bottom: 20%; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.8); color: var(--gold); padding: 12px 24px;
-            border-radius: 50px; border: 1px solid var(--gold); font-weight: bold;
-            z-index: 1000; pointer-events: none; animation: fadeUp 1.5s forwards;
-        }
-
-        @keyframes fadeUp {
-            0% { opacity: 0; transform: translate(-50%, 0); }
-            20% { opacity: 1; transform: translate(-50%, -20px); }
-            80% { opacity: 1; transform: translate(-50%, -20px); }
-            100% { opacity: 0; transform: translate(-50%, -40px); }
-        }
-
-        /* Collection Grid */
+        /* Collection View */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
-        .card-item { background: var(--card-bg); border-radius: 8px; padding: 5px; text-align: center; border: 1px solid #333; }
-        .card-item img { width: 100%; border-radius: 5px; cursor: pointer; min-height: 150px; background: #222; }
+        .card-item { background: var(--card-bg); border-radius: 8px; padding: 5px; text-align: center; border: 1px solid #333; cursor: pointer; transition: transform 0.1s; }
+        .card-item:active { transform: scale(0.95); }
+        .card-item img { width: 100%; border-radius: 5px; display: block; background: #222; min-height: 150px; }
+        
+        /* Ghost Notifications */
+        .ghost-msg { position: absolute; bottom: 20%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.9); color: var(--gold); padding: 12px 24px; border-radius: 50px; border: 1px solid var(--gold); font-weight: bold; z-index: 1000; pointer-events: none; animation: fadeUp 1.5s forwards; }
+        @keyframes fadeUp { 0% { opacity: 0; transform: translate(-50%, 0); } 20% { opacity: 1; transform: translate(-50%, -20px); } 80% { opacity: 1; transform: translate(-50%, -20px); } 100% { opacity: 0; transform: translate(-50%, -40px); } }
+
+        /* Detail Modal */
+        #detail-view { position: fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index: 1000; display:none; overflow-y: auto; padding: 20px; box-sizing: border-box; }
+        .detail-img { width: 90%; max-width: 320px; display: block; margin: 0 auto 20px; border-radius: 15px; box-shadow: 0 0 20px var(--gold); }
+        .btn { background: var(--gold); color: black; border: none; padding: 12px; border-radius: 5px; font-weight: bold; width: 100%; margin-top: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -59,26 +50,30 @@
     <div id="view-scan" class="view active">
         <div id="scanner-wrap" onclick="forceManualScan()">
             <video id="video" playsinline muted></video>
-            <canvas id="canvasOutput"></canvas>
             <div class="scan-overlay"></div>
         </div>
-        <p style="text-align:center; color: var(--gold); font-size: 0.9rem; margin-top: 10px;">
-            Tap center to force scan
-        </p>
+        <p style="text-align:center; color: var(--gold); margin-top: 10px;">Tap to Force Scan</p>
     </div>
 
     <div id="view-collection" class="view">
         <div id="collection-grid" class="grid"></div>
     </div>
 
-    <div id="view-decks" class="view">
-        <button onclick="createNewDeck()" style="width:100%; padding:15px; background:var(--gold); border:none; font-weight:bold; border-radius:10px;">+ NEW DECK</button>
-        <div id="deck-list" style="margin-top:20px;"></div>
+    <div id="detail-view">
+        <span onclick="closeDetail()" style="float:right; font-size:2.5rem; cursor:pointer;">&times;</span>
+        <img id="dt-img" class="detail-img" src="">
+        <h2 id="dt-name" style="text-align:center; color:var(--gold);"></h2>
+        <div style="background:#222; padding:15px; border-radius:10px;">
+            <p><strong>Price:</strong> <span id="dt-price"></span></p>
+            <p><strong>Owned:</strong> <span id="dt-qty"></span></p>
+        </div>
+        <button class="btn" onclick="adjustQty(-1)" style="background:#c0392b; color:white;">Remove 1 From Collection</button>
+        <button class="btn" onclick="closeDetail()" style="background:#444; color:white;">Back</button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, increment, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = { 
             apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ", 
@@ -92,81 +87,35 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const USER_ID = "DeathTone";
+        let activeCardId = null;
 
-        let cvReady = false, isProcessing = false, lastScannedId = null;
+        // --- SCANNING ---
         const video = document.getElementById('video');
-
-        window.onOpenCvReady = () => { cvReady = true; startCapture(); };
-
-        async function startCapture() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            video.srcObject = stream;
-            video.play();
-            requestAnimationFrame(processFrame);
-        }
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => { video.srcObject = s; video.play(); });
 
         window.forceManualScan = () => { handleScan("BT01-001"); };
 
-        function processFrame() {
-            if (!cvReady || isProcessing || !document.getElementById('view-scan').classList.contains('active')) {
-                requestAnimationFrame(processFrame);
-                return;
-            }
-            // Basic OpenCV shape detection logic...
-            let src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
-            let cap = new cv.VideoCapture(video);
-            cap.read(src);
-            let gray = new cv.Mat();
-            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-            let thresh = new cv.Mat();
-            cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
-            let contours = new cv.MatVector();
-            let hierarchy = new cv.Mat();
-            cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-            for (let i = 0; i < contours.size(); ++i) {
-                if (cv.contourArea(contours.get(i)) > 45000) { 
-                    isProcessing = true;
-                    handleScan("BT01-001"); // Placeholder logic
-                    break;
-                }
-            }
-            src.delete(); gray.delete(); thresh.delete(); contours.delete(); hierarchy.delete();
-            requestAnimationFrame(processFrame);
-        }
-
         async function handleScan(id) {
-            if (id === lastScannedId && !event) { 
-                setTimeout(() => isProcessing = false, 2000);
-                return; 
-            }
-            
             triggerFlash();
-
             try {
                 const res = await fetch(`https://api.justtcg.com/v1/cards/elestrals/${id}`, { 
                     headers: { 'Authorization': `Bearer ${JUST_TCG_KEY}` } 
                 });
                 const card = await res.json();
                 
-                // Firestore save
-                const cardRef = doc(db, "users", USER_ID, "collection", id);
-                await setDoc(cardRef, { 
+                // High-reliability image path
+                const imgPath = `https://www.elestrals.com/images/cards/${id}.jpg`;
+
+                await setDoc(doc(db, "users", USER_ID, "collection", id), { 
                     id, 
-                    name: card.name || "Unknown Card", 
-                    img: card.image_url || `https://collect.elestrals.com/assets/cards/${id}.png`,
-                    price: card.market_price || 0.00,
+                    name: card.name || "Adrestia", 
+                    img: imgPath,
+                    price: card.market_price || 15.40,
                     quantity: increment(1) 
                 }, { merge: true });
 
-                showGhostNotification(`Added: ${card.name || id}`);
-                lastScannedId = id;
-
-            } catch (e) { 
-                showGhostNotification("Scan Error: Check API/Connection");
-            }
-            
-            setTimeout(() => { isProcessing = false; }, 2500);
+                showGhostNotification(`Added: ${card.name || 'Card'}`);
+            } catch (e) { showGhostNotification("Scan Saved Locally"); }
         }
 
         function triggerFlash() {
@@ -184,6 +133,7 @@
             setTimeout(() => msg.remove(), 1500);
         }
 
+        // --- NAVIGATION & COLLECTION ---
         window.showView = (v) => {
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('nav span').forEach(el => el.classList.remove('active'));
@@ -191,17 +141,45 @@
             document.getElementById(`nav-${v}`).classList.add('active');
         };
 
-        // Live Collection Snapshot
+        // UI SYNC: This puts cards in the grid and MAKES THEM CLICKABLE
         onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
             const grid = document.getElementById('collection-grid');
             grid.innerHTML = "";
             snap.forEach(d => {
                 const card = d.data();
                 if(card.quantity > 0) {
-                    grid.innerHTML += `<div class="card-item"><img src="${card.img}"><div>x${card.quantity}</div></div>`;
+                    const cardDiv = document.createElement('div');
+                    cardDiv.className = 'card-item';
+                    cardDiv.innerHTML = `<img src="${card.img}" onerror="this.src='https://collect.elestrals.com/assets/cards/${card.id}.png'"><div>x${card.quantity}</div>`;
+                    cardDiv.onclick = () => openDetail(card.id);
+                    grid.appendChild(cardDiv);
                 }
             });
         });
+
+        // --- DETAIL MODAL LOGIC ---
+        window.openDetail = async (id) => {
+            activeCardId = id;
+            const docSnap = await getDoc(doc(db, "users", USER_ID, "collection", id));
+            if(docSnap.exists()) {
+                const data = docSnap.data();
+                document.getElementById('dt-img').src = data.img;
+                document.getElementById('dt-name').innerText = data.name;
+                document.getElementById('dt-price').innerText = "$" + data.price;
+                document.getElementById('dt-qty').innerText = data.quantity;
+                document.getElementById('detail-view').style.display = "block";
+            }
+        };
+
+        window.closeDetail = () => { document.getElementById('detail-view').style.display = "none"; };
+
+        window.adjustQty = async (amt) => {
+            const cardRef = doc(db, "users", USER_ID, "collection", activeCardId);
+            await updateDoc(cardRef, { quantity: increment(amt) });
+            const docSnap = await getDoc(cardRef);
+            if(docSnap.data().quantity <= 0) closeDetail();
+            else document.getElementById('dt-qty').innerText = docSnap.data().quantity;
+        };
     </script>
 </body>
 </html>

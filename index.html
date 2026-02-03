@@ -14,9 +14,10 @@
         .view { display: none; padding: 20px; padding-bottom: 100px; }
         .view.active { display: block; }
         
-        #scanner-wrap { position: relative; width: 100%; height: 60vh; background: #000; border-radius: 15px; overflow: hidden; }
+        /* Added cursor pointer to indicate touch-to-scan */
+        #scanner-wrap { position: relative; width: 100%; height: 60vh; background: #000; border-radius: 15px; overflow: hidden; cursor: crosshair; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #canvasOutput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.4; pointer-events: none; }
+        #canvasOutput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.3; pointer-events: none; }
         
         .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px solid var(--gold); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); pointer-events: none; }
         #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index: 100; transition: opacity 0.1s; }
@@ -35,18 +36,28 @@
     </nav>
 
     <div id="view-scan" class="view active">
-        <div id="scanner-wrap">
+        <div id="scanner-wrap" onclick="forceManualScan()">
             <video id="video" playsinline muted></video>
-            <canvas id="canvasOutput"></canvas> <div class="scan-overlay"></div>
+            <canvas id="canvasOutput"></canvas>
+            <div class="scan-overlay"></div>
         </div>
-        <div id="status-indicator" style="text-align: center; margin-top: 10px; color: var(--gold);">Waiting for Engine...</div>
+        <div id="status-indicator" style="text-align: center; margin-top: 10px; color: var(--gold);">
+            Smart Scan Active | Tap Screen to Force Scan
+        </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, increment, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        const firebaseConfig = { apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ", authDomain: "elestralcardscanner.firebaseapp.com", projectId: "elestralcardscanner", storageBucket: "elestralcardscanner.firebasestorage.app", messagingSenderId: "50825995351", appId: "1:50825995351:web:8a8abde8c256fca22cef12" };
+        const firebaseConfig = { 
+            apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ", 
+            authDomain: "elestralcardscanner.firebaseapp.com", 
+            projectId: "elestralcardscanner", 
+            storageBucket: "elestralcardscanner.firebasestorage.app", 
+            messagingSenderId: "50825995351", 
+            appId: "1:50825995351:web:8a8abde8c256fca22cef12" 
+        };
         const JUST_TCG_KEY = "tcg_b13ec49c98514734adacaae6ad57da50";
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
@@ -55,36 +66,28 @@
         let cvReady = false, isProcessing = false, lastScannedId = null;
         const video = document.getElementById('video');
 
-        // Handle OpenCV Engine Load
-        window.onOpenCvReady = () => {
-            // Check for WASM runtime specifically
-            if (cv.onRuntimeInitialized) {
-                cv.onRuntimeInitialized = () => { startScanning(); };
-            } else {
-                startScanning();
-            }
-        };
+        window.onOpenCvReady = () => { startScanning(); };
 
         function startScanning() {
             cvReady = true;
-            document.getElementById('status-indicator').innerText = "Smart Scanner Active";
+            document.getElementById('status-indicator').innerText = "Scanner Ready: Tap to Scan";
             startCapture();
         }
 
         async function startCapture() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } } 
-                });
-                video.srcObject = stream;
-                video.play();
-                video.onloadedmetadata = () => {
-                    requestAnimationFrame(processFrame);
-                };
-            } catch (err) {
-                document.getElementById('status-indicator').innerText = "Camera Error: " + err.message;
-            }
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" } 
+            });
+            video.srcObject = stream;
+            video.play();
+            requestAnimationFrame(processFrame);
         }
+
+        // --- NEW: FORCE SCAN ON TOUCH ---
+        window.forceManualScan = () => {
+            console.log("Manual trigger activated.");
+            handleScan("BT01-001"); // In the final version, this will trigger the recognizer
+        };
 
         function processFrame() {
             if (!cvReady || isProcessing || !document.getElementById('view-scan').classList.contains('active')) {
@@ -92,15 +95,12 @@
                 return;
             }
 
-            // Sync matrix size with actual video stream
             let src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
             let cap = new cv.VideoCapture(video);
             cap.read(src);
 
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-            
-            // Simplified thresholding for higher speed
             let thresh = new cv.Mat();
             cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
@@ -108,29 +108,24 @@
             let hierarchy = new cv.Mat();
             cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-            // DRAW DEBUG VIEW (If you see white lines, it's working!)
             cv.imshow('canvasOutput', thresh); 
 
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
-                let area = cv.contourArea(cnt);
-                
-                // If it detects a large enough white shape, trigger scan
-                if (area > 30000) { 
+                if (cv.contourArea(cnt) > 40000) { 
                     isProcessing = true;
                     handleScan("BT01-001"); 
                     break;
                 }
             }
 
-            // Cleanup memory to prevent browser crash
             src.delete(); gray.delete(); thresh.delete(); contours.delete(); hierarchy.delete();
             requestAnimationFrame(processFrame);
         }
 
         async function handleScan(id) {
-            if (id === lastScannedId) {
-                setTimeout(() => isProcessing = false, 2000); // 2s lock for same card
+            if (id === lastScannedId && !event) { // Only lock if it's an auto-scan
+                setTimeout(() => isProcessing = false, 2000);
                 return;
             }
             
@@ -141,12 +136,16 @@
                 });
                 const card = await res.json();
                 if (card) {
-                    await setDoc(doc(db, "users", USER_ID, "collection", id), { ...card, quantity: increment(1) }, { merge: true });
+                    await setDoc(doc(db, "users", USER_ID, "collection", id), { 
+                        ...card, 
+                        img: card.image_url || `https://collect.elestrals.com/assets/cards/${id}.png`,
+                        quantity: increment(1) 
+                    }, { merge: true });
                     lastScannedId = id;
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error("Scan Error:", e); }
             
-            setTimeout(() => isProcessing = false, 3000); // Global 3s cooldown
+            setTimeout(() => isProcessing = false, 2500);
         }
 
         function flashScreen() {

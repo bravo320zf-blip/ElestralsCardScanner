@@ -13,22 +13,19 @@
         .view { display: none; padding: 20px; padding-bottom: 80px; }
         .view.active { display: block; }
         
-        /* Scanner */
         #video-container { position: relative; width: 100%; height: 60vh; background: #000; border-radius: 15px; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; }
         .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px dashed var(--gold); border-radius: 12px; pointer-events: none; }
         
-        /* Grid Layouts */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; }
         .card-item { background: var(--card-bg); border-radius: 10px; padding: 10px; border: 1px solid #333; position: relative; }
         .card-item img { width: 100%; border-radius: 5px; }
         .qty-badge { position: absolute; top: 5px; right: 5px; background: var(--gold); color: black; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; }
         .price-tag { color: var(--gold); font-size: 0.9rem; font-weight: bold; margin-top: 5px; display: block; }
         
-        /* Deck Builder */
         .deck-list-item { background: #222; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--gold); }
-        .btn { background: var(--gold); color: black; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; }
-        .share-btn { background: #444; color: white; padding: 5px 10px; font-size: 0.7rem; }
+        .btn { background: var(--gold); color: black; border: none; padding: 15px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; text-transform: uppercase; }
+        .share-btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -44,17 +41,16 @@
             <video id="video" playsinline></video>
             <div class="scan-overlay"></div>
         </div>
-        <button class="btn" style="margin-top: 20px;" onclick="simulateScan()">SCAN CARD</button>
-        <p style="text-align: center; font-size: 0.8rem; color: #888;">Align card within the frame to scan.</p>
+        <button class="btn" style="margin-top: 20px;" onclick="simulateScan()">Scan Card</button>
     </div>
 
     <div id="view-collection" class="view">
-        <h3>My Collection</h3>
+        <h3 id="collection-title">My Collection</h3>
         <div id="collection-grid" class="grid"></div>
     </div>
 
     <div id="view-decks" class="view">
-        <button class="btn" onclick="createNewDeck()">+ CREATE NEW DECK</button>
+        <button class="btn" onclick="createNewDeck()">+ Create New Deck</button>
         <div id="deck-list" style="margin-top: 20px;"></div>
     </div>
 
@@ -62,37 +58,33 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, increment, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        // 🛑 REPLACE WITH YOUR FIREBASE CONFIG FROM STEP 1
-const firebaseConfig = {
-  apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ",
-  authDomain: "elestralcardscanner.firebaseapp.com",
-  projectId: "elestralcardscanner",
-  storageBucket: "elestralcardscanner.firebasestorage.app",
-  messagingSenderId: "50825995351",
-  appId: "1:50825995351:web:8a8abde8c256fca22cef12",
-  measurementId: "G-1WFXZWZ668"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ",
+            authDomain: "elestralcardscanner.firebaseapp.com",
+            projectId: "elestralcardscanner",
+            storageBucket: "elestralcardscanner.firebasestorage.app",
+            messagingSenderId: "50825995351",
+            appId: "1:50825995351:web:8a8abde8c256fca22cef12"
+        };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const USER_ID = "DeathTone"; // Your nickname
+        const USER_ID = "DeathTone";
 
-        // --- NAVIGATION ---
         window.showView = (v) => {
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('nav span').forEach(el => el.classList.remove('active'));
             document.getElementById(`view-${v}`).classList.add('active');
-            document.getElementById(`nav-${v}`).classList.add('active');
+            const navBtn = document.getElementById(`nav-${v}`);
+            if(navBtn) navBtn.classList.add('active');
         };
 
-        // --- CAMERA ---
         const video = document.getElementById('video');
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-            .then(stream => { video.srcObject = stream; video.play(); });
+            .then(stream => { video.srcObject = stream; video.play(); })
+            .catch(err => console.error("Camera access denied"));
 
-        // --- CORE LOGIC ---
         window.simulateScan = async () => {
-            // Logic placeholder: In a future update, we'll replace this with Image Hashing
             const mockCardId = "BT01-001"; 
             const cardData = {
                 name: "Adrestia",
@@ -106,10 +98,9 @@ const firebaseConfig = {
                 quantity: increment(1),
                 updatedAt: new Date()
             }, { merge: true });
-            alert("Card Scanned & Added!");
+            alert("Added to Collection!");
         };
 
-        // Live Collection Sync
         onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
             const grid = document.getElementById('collection-grid');
             grid.innerHTML = "";
@@ -119,13 +110,12 @@ const firebaseConfig = {
                     <div class="card-item">
                         <span class="qty-badge">x${item.quantity}</span>
                         <img src="${item.img}">
-                        <small>${item.name}</small>
-                        <span class="price-tag">$${item.price}</span>
+                        <div style="margin-top:5px;"><small>${item.name}</small></div>
+                        <span class="price-tag">$${item.price.toFixed(2)}</span>
                     </div>`;
             });
         });
 
-        // --- DECK BUILDING & SHARING ---
         window.createNewDeck = async () => {
             const name = prompt("Deck Name?");
             if(!name) return;
@@ -156,15 +146,18 @@ const firebaseConfig = {
         window.shareDeck = (id) => {
             const url = `${window.location.origin}${window.location.pathname}?deckId=${id}`;
             navigator.clipboard.writeText(url);
-            alert("Deck link copied! Send this to your friends.");
+            alert("Link Copied!");
         };
 
-        // Handle Shared Link
         const urlParams = new URLSearchParams(window.location.search);
         if(urlParams.has('deckId')) {
             const id = urlParams.get('deckId');
             getDoc(doc(db, "decks", id)).then(s => {
-                if(s.exists()) alert("Viewing Shared Deck: " + s.data().name);
+                if(s.exists()) {
+                    showView('collection');
+                    document.getElementById('collection-title').innerText = "Shared Deck: " + s.data().name;
+                    // In a final version, we'd filter the grid here to only show deck cards
+                }
             });
         }
     </script>

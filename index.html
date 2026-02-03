@@ -13,18 +13,23 @@
         nav span.active { color: var(--gold); }
         .view { display: none; padding: 20px; padding-bottom: 100px; }
         .view.active { display: block; }
-        #scanner-wrap { position: relative; width: 100%; height: 65vh; background: #000; border-radius: 15px; overflow: hidden; }
+        
+        #scanner-wrap { position: relative; width: 100%; height: 60vh; background: #000; border-radius: 15px; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; }
+        /* Debug canvas sits on top of video */
+        #canvasOutput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; pointer-events: none; }
+        
         .scan-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 300px; border: 2px solid var(--gold); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); pointer-events: none; }
-        #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index: 10; transition: opacity 0.1s; }
+        #flash { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index: 100; transition: opacity 0.1s; }
+        
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
-        .card-item { background: var(--card-bg); border-radius: 8px; padding: 5px; text-align: center; border: 1px solid #333; position: relative; }
+        .card-item { background: var(--card-bg); border-radius: 8px; padding: 5px; text-align: center; border: 1px solid #333; }
         .card-item img { width: 100%; border-radius: 5px; cursor: pointer; min-height: 150px; background: #222; }
+        
         #detail-view { position: fixed; top:0; left:0; width:100%; height:100%; background: var(--bg); z-index: 1000; display:none; overflow-y: auto; padding: 20px; box-sizing: border-box; }
         .detail-img { width: 85%; max-width: 320px; display: block; margin: 0 auto 20px; border-radius: 15px; box-shadow: 0 0 20px var(--gold); }
         .btn { background: var(--gold); color: black; border: none; padding: 12px; border-radius: 5px; font-weight: bold; width: 100%; margin-top: 10px; cursor: pointer; }
         .btn-red { background: #c0392b; color: white; }
-        #status-indicator { text-align: center; color: var(--gold); font-size: 0.9rem; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -38,29 +43,21 @@
     <div id="view-scan" class="view active">
         <div id="scanner-wrap">
             <video id="video" playsinline muted></video>
+            <canvas id="canvasOutput"></canvas>
             <div class="scan-overlay"></div>
         </div>
-        <div id="status-indicator">Initializing Computer Vision...</div>
+        <div id="status-indicator" style="text-align: center; margin-top: 10px; color: var(--gold);">Waiting for OpenCV...</div>
     </div>
 
-    <div id="view-collection" class="view">
-        <div id="collection-grid" class="grid"></div>
-    </div>
-
-    <div id="view-decks" class="view">
-        <button class="btn" onclick="createNewDeck()">+ Create New Deck</button>
-        <div id="deck-list" style="margin-top:20px;"></div>
-    </div>
-
+    <div id="view-collection" class="view"><div id="collection-grid" class="grid"></div></div>
+    <div id="view-decks" class="view"><button class="btn" onclick="createNewDeck()">+ Create New Deck</button><div id="deck-list" style="margin-top:20px;"></div></div>
     <div id="detail-view">
         <span onclick="closeDetail()" style="float:right; font-size:2rem; cursor:pointer;">&times;</span>
-        <img id="dt-img" class="detail-img" src="">
-        <h2 id="dt-name" style="text-align:center;"></h2>
+        <img id="dt-img" class="detail-img" src=""><h2 id="dt-name" style="text-align:center;"></h2>
         <div style="background:#222; padding:15px; border-radius:10px;">
-            <p><strong>Market Price:</strong> <span id="dt-price" style="color:var(--gold);">Fetching...</span></p>
+            <p><strong>Market Price:</strong> <span id="dt-price" style="color:var(--gold);"></span></p>
             <p><strong>Quantity:</strong> <span id="dt-qty"></span></p>
-            <select id="deck-selector" class="btn" style="background:#333; color:white; border:1px solid var(--gold);"></select>
-            <button class="btn" onclick="addToSelectedDeck()">ADD TO DECK</button>
+            <select id="deck-selector" class="btn"></select><button class="btn" onclick="addToSelectedDeck()">ADD TO DECK</button>
         </div>
         <button class="btn btn-red" onclick="adjustQty(-1)">REMOVE FROM COLLECTION</button>
     </div>
@@ -69,32 +66,22 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, increment, getDoc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ",
-            authDomain: "elestralcardscanner.firebaseapp.com",
-            projectId: "elestralcardscanner",
-            storageBucket: "elestralcardscanner.firebasestorage.app",
-            messagingSenderId: "50825995351",
-            appId: "1:50825995351:web:8a8abde8c256fca22cef12"
-        };
-
+        // Firebase Config (Keep your existing one)
+        const firebaseConfig = { apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ", authDomain: "elestralcardscanner.firebaseapp.com", projectId: "elestralcardscanner", storageBucket: "elestralcardscanner.firebasestorage.app", messagingSenderId: "50825995351", appId: "1:50825995351:web:8a8abde8c256fca22cef12" };
         const JUST_TCG_KEY = "tcg_b13ec49c98514734adacaae6ad57da50";
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const USER_ID = "DeathTone";
-        
-        let cvReady = false;
-        let isProcessing = false;
-        let activeCard = null;
-        let lastScannedId = null;
+
+        let cvReady = false, isProcessing = false, lastScannedId = null;
+        const video = document.getElementById('video');
 
         window.onOpenCvReady = () => {
             cvReady = true;
-            document.getElementById('status-indicator').innerText = "Smart Scanner Active";
+            document.getElementById('status-indicator').innerText = "Scanner Ready: Place card in frame";
             startCapture();
         };
 
-        const video = document.getElementById('video');
         async function startCapture() {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             video.srcObject = stream;
@@ -108,60 +95,57 @@
                 return;
             }
 
-            // Capture frame to OpenCV Mat
             let src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
             let cap = new cv.VideoCapture(video);
             cap.read(src);
 
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-            cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
-            cv.Canny(gray, gray, 75, 200);
+            
+            // Adaptive Thresholding: Better for different lighting
+            let thresh = new cv.Mat();
+            cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
-            cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+            // DEBUG: Draw contours on canvas so you can see what it's detecting
+            cv.imshow('canvasOutput', thresh); 
 
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
                 let area = cv.contourArea(cnt);
-                let peri = cv.arcLength(cnt, true);
                 let approx = new cv.Mat();
+                let peri = cv.arcLength(cnt, true);
                 cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
 
-                // Detect if it's a card-shaped rectangle
-                if (approx.rows === 4 && area > 40000) {
+                // Relaxed detection: Look for 4-corner shapes with decent size
+                if (approx.rows === 4 && area > 25000) {
                     isProcessing = true;
-                    await handleScan("BT01-001"); // Replace with actual ID recognition in next step
+                    await handleScan("BT01-001"); // Placeholder
                     break;
                 }
                 approx.delete();
             }
 
-            src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+            src.delete(); gray.delete(); thresh.delete(); contours.delete(); hierarchy.delete();
             requestAnimationFrame(processFrame);
         }
 
-        async function handleScan(detectedId) {
-            // Prevent duplicate scans of the same card in a row
-            if (detectedId === lastScannedId) {
+        async function handleScan(id) {
+            if (id === lastScannedId) {
                 setTimeout(() => isProcessing = false, 2000);
                 return;
             }
-
-            try {
-                const res = await fetch(`https://api.justtcg.com/v1/cards/elestrals/${detectedId}`, {
-                    headers: { 'Authorization': `Bearer ${JUST_TCG_KEY}` }
-                });
-                const card = await res.json();
-                
-                if (card) {
-                    flashScreen();
-                    await saveToCollection(card);
-                    lastScannedId = detectedId;
-                }
-            } catch (e) { console.error(e); }
-            
+            flashScreen();
+            // Call your JustTCG API and save (Same as your previous logic)
+            const res = await fetch(`https://api.justtcg.com/v1/cards/elestrals/${id}`, { headers: { 'Authorization': `Bearer ${JUST_TCG_KEY}` } });
+            const card = await res.json();
+            if (card) {
+                await setDoc(doc(db, "users", USER_ID, "collection", id), { ...card, quantity: increment(1) }, { merge: true });
+                lastScannedId = id;
+            }
             setTimeout(() => isProcessing = false, 3000);
         }
 
@@ -171,60 +155,12 @@
             setTimeout(() => f.style.opacity = "0", 150);
         }
 
-        async function saveToCollection(card) {
-            const cardRef = doc(db, "users", USER_ID, "collection", card.id);
-            await setDoc(cardRef, {
-                id: card.id,
-                name: card.name,
-                img: card.image_url || `https://collect.elestrals.com/assets/cards/${card.id}.png`,
-                price: card.market_price || 0.0,
-                quantity: increment(1)
-            }, { merge: true });
-        }
-
-        // --- UI LOGIC ---
+        // --- Keep your existing navigation, collection sync, and deck functions ---
         window.showView = (v) => {
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('nav span').forEach(el => el.classList.remove('active'));
             document.getElementById(`view-${v}`).classList.add('active');
             document.getElementById(`nav-${v}`).classList.add('active');
-            if (v === 'collection') lastScannedId = null; // Reset scanner lock when checking collection
-        };
-
-        onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
-            const grid = document.getElementById('collection-grid');
-            grid.innerHTML = "";
-            snap.forEach(d => {
-                const card = d.data();
-                if (card.quantity > 0) {
-                    grid.innerHTML += `<div class="card-item"><img src="${card.img}" onclick="openDetail('${card.id}')"><div>x${card.quantity}</div></div>`;
-                }
-            });
-        });
-
-        window.openDetail = async (id) => {
-            const snap = await getDoc(doc(db, "users", USER_ID, "collection", id));
-            activeCard = snap.data();
-            document.getElementById('dt-img').src = activeCard.img;
-            document.getElementById('dt-name').innerText = activeCard.name;
-            document.getElementById('dt-qty').innerText = activeCard.quantity;
-            document.getElementById('dt-price').innerText = "$" + activeCard.price.toFixed(2);
-            document.getElementById('detail-view').style.display = "block";
-            loadDeckList();
-        };
-
-        async function loadDeckList() {
-            const sel = document.getElementById('deck-selector');
-            sel.innerHTML = '<option value="">Add to Deck...</option>';
-            const decks = await getDoc(collection(db, "decks")); // Simplified sync
-        }
-
-        window.closeDetail = () => document.getElementById('detail-view').style.display = "none";
-        
-        window.adjustQty = async (amt) => {
-            const cardRef = doc(db, "users", USER_ID, "collection", activeCard.id);
-            await updateDoc(cardRef, { quantity: increment(amt) });
-            closeDetail();
         };
     </script>
 </body>

@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Death Forge: Elestrals Legend Tracker</title>
+    <title>Death Forge: Elestrals Vault</title>
     <style>
         :root { 
             --gold: #d4af37; --midnight: #0a0e14; --card-bg: #151a21; 
-            --glow: rgba(212, 175, 55, 0.3); --accent-blue: #00d4ff;
+            --glow: rgba(212, 175, 55, 0.4); --accent-blue: #00d4ff;
         }
 
         body { 
             margin: 0; font-family: 'Segoe UI', serif; 
             background-color: var(--midnight); color: #e0e0e0; 
-            overflow-x: hidden;
+            overflow-x: hidden; background-image: radial-gradient(circle at center, #16212e 0%, var(--midnight) 100%);
         }
 
         /* Fixed Navigation */
@@ -21,38 +21,46 @@
             display: flex; justify-content: space-around; background: rgba(0,0,0,0.9); 
             padding: 15px 0; position: sticky; top: 0; z-index: 100; border-bottom: 2px solid var(--gold);
         }
-        nav span { cursor: pointer; font-weight: bold; color: #888; text-transform: uppercase; }
+        nav span { cursor: pointer; font-weight: bold; color: #888; text-transform: uppercase; font-size: 0.9rem; }
         nav span.active { color: var(--gold); text-shadow: 0 0 10px var(--gold); }
 
         .view { display: none; padding: 15px; box-sizing: border-box; }
         .view.active { display: block; }
 
-        /* Fixed Search & Filters */
-        .search-container {
-            position: sticky; top: 60px; background: var(--midnight);
-            padding: 10px 0; z-index: 90; margin-bottom: 15px;
+        /* Scanner Restoration */
+        #scanner-container { 
+            position: relative; width: 100%; height: 55vh; background: #000; 
+            border-radius: 15px; overflow: hidden; border: 1px solid var(--gold);
+            box-shadow: 0 0 20px var(--glow);
         }
-        #search { 
-            width: 100%; padding: 12px; background: #1a1a1a; border: 1px solid var(--gold); 
-            color: white; border-radius: 8px; box-sizing: border-box; margin-bottom: 10px;
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .scan-overlay { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            width: 220px; height: 300px; border: 2px solid var(--gold); border-radius: 12px;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); pointer-events: none;
         }
-        .filter-scroll { 
-            display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; 
-            -webkit-overflow-scrolling: touch; 
-        }
-        .chip { 
-            background: #222; padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; 
-            white-space: nowrap; cursor: pointer; border: 1px solid #444; 
-        }
-        .chip.active { background: var(--gold); color: black; font-weight: bold; }
 
-        /* Grid & Cards */
+        /* Ghost Notification */
+        .ghost-msg { 
+            position: fixed; bottom: 20%; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); color: var(--gold); padding: 12px 24px;
+            border-radius: 50px; border: 1px solid var(--gold); font-weight: bold;
+            z-index: 1000; pointer-events: none; animation: fadeUp 1.5s forwards;
+        }
+        @keyframes fadeUp { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; transform: translateY(-20px); } 80% { opacity: 1; transform: translateY(-20px); } 100% { opacity: 0; transform: translateY(-40px); } }
+
+        /* Vault Search & Grid */
+        .search-wrap { margin-bottom: 15px; }
+        #search-bar { 
+            width: 100%; padding: 12px; background: #1a1a1a; border: 1px solid var(--gold); 
+            color: white; border-radius: 8px; box-sizing: border-box; 
+        }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; }
         .card-item { 
             background: var(--card-bg); border-radius: 10px; padding: 8px; text-align: center; 
-            border: 1px solid #333; pointer-events: auto;
+            border: 1px solid #333; cursor: pointer;
         }
-        .card-item img { width: 100%; border-radius: 5px; pointer-events: none; }
+        .card-item img { width: 100%; border-radius: 5px; background: #222; min-height: 140px; }
 
         /* Detail Modal */
         #detail-view { 
@@ -64,115 +72,136 @@
 </head>
 <body>
 
+    <div id="notification-container"></div>
+
     <nav>
         <span id="nav-scan" class="active" onclick="showView('scan')">Summon</span>
-        <span id="nav-collection" onclick="showView('collection')">Vault</span>
+        <span id="nav-vault" onclick="showView('vault')">Vault</span>
     </nav>
 
     <div id="view-scan" class="view active">
-        <div style="text-align:center; padding: 50px 20px; border: 2px dashed #444; border-radius: 15px;">
-            <p>Scanner Active</p>
-            <button onclick="mockScan()" style="padding:15px; background:var(--gold); border:none; font-weight:bold; border-radius:10px;">MOCK SCAN (ADRESTIA)</button>
+        <div id="scanner-container" onclick="manualTrigger()">
+            <video id="video" playsinline muted></video>
+            <div class="scan-overlay"></div>
         </div>
+        <p style="text-align:center; color: var(--gold); margin-top: 15px; font-weight: bold;">TAP CAMERA TO SUMMON CARD</p>
     </div>
 
-    <div id="view-collection" class="view">
-        <div class="search-container">
-            <input type="text" id="search" placeholder="Search by name..." oninput="renderVault()">
-            <div class="filter-scroll">
-                <div class="chip active" onclick="setFilter('All', this)">All</div>
-                <div class="chip" onclick="setFilter('Elestral', this)">Elestrals</div>
-                <div class="chip" onclick="setFilter('Spirit', this)">Spirits</div>
-                <div class="chip" onclick="setFilter('Spell', this)">Spells</div>
-            </div>
+    <div id="view-vault" class="view">
+        <div class="search-wrap">
+            <input type="text" id="search-bar" placeholder="Search your Vault..." oninput="filterVault()">
         </div>
-        <div id="collection-grid" class="grid"></div>
+        <div id="vault-grid" class="grid"></div>
     </div>
 
     <div id="detail-view">
         <span onclick="closeDetail()" style="float:right; font-size:2.5rem; color:var(--gold); cursor:pointer;">&times;</span>
         <img id="dt-img" class="detail-img" src="">
-        <h2 id="dt-name" style="text-align:center;"></h2>
-        <p id="dt-stats" style="text-align:center; color:var(--gold);"></p>
-        <button onclick="closeDetail()" style="width:100%; padding:15px; background:#444; color:white; border:none; border-radius:8px;">BACK</button>
+        <h2 id="dt-name" style="text-align:center; margin: 10px 0;"></h2>
+        <div style="background:#222; padding:15px; border-radius:10px; border: 1px solid var(--gold);">
+            <p><strong>Value:</strong> <span id="dt-price"></span></p>
+            <p><strong>Owned:</strong> <span id="dt-qty"></span></p>
+        </div>
+        <button onclick="closeDetail()" style="width:100%; padding:15px; background:#333; color:white; border:1px solid #555; border-radius:8px; margin-top:20px;">BACK TO VAULT</button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, increment, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        const firebaseConfig = { apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ", projectId: "elestralcardscanner", appId: "1:50825995351:web:8a8abde8c256fca22cef12" };
+        const firebaseConfig = { 
+            apiKey: "AIzaSyCSLj634AKyrwrDE1FPcXTsePPuiiYBFKQ", 
+            projectId: "elestralcardscanner", 
+            appId: "1:50825995351:web:8a8abde8c256fca22cef12" 
+        };
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const USER_ID = "DeathTone";
+        const JUST_TCG_KEY = "tcg_b13ec49c98514734adacaae6ad57da50";
 
-        let vaultData = [];
-        let currentFilter = 'All';
+        let vaultCards = [];
 
-        // --- NAVIGATION & FILTERS ---
+        // 1. RE-ENABLE CAMERA FEED
+        const video = document.getElementById('video');
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(s => { video.srcObject = s; video.play(); })
+            .catch(e => console.error("Camera Error:", e));
+
+        // 2. RE-ENABLE SCAN LOGIC
+        window.manualTrigger = async () => {
+            const id = prompt("Enter Card Number (e.g. BT01-001):");
+            if(!id) return;
+
+            try {
+                const res = await fetch(`https://api.justtcg.com/v1/cards?q=${id}&game=elestrals`, {
+                    headers: { 'Authorization': `Bearer ${JUST_TCG_KEY}` }
+                });
+                const data = await res.json();
+                const card = data.data ? data.data[0] : null;
+
+                const name = card ? card.name : "Unknown Elestral";
+                const price = card ? (card.market_price || card.set_value_usd || 0.00) : 0.00;
+
+                await setDoc(doc(db, "users", USER_ID, "collection", id), {
+                    id, name, price,
+                    img: `https://collect.elestrals.com/assets/cards/${id}.png`,
+                    quantity: increment(1)
+                }, { merge: true });
+
+                showGhostNotification(`Summoned: ${name}`);
+            } catch (e) {
+                showGhostNotification("Connection Lost...");
+            }
+        };
+
+        function showGhostNotification(text) {
+            const container = document.getElementById('notification-container');
+            const msg = document.createElement('div');
+            msg.className = 'ghost-msg';
+            msg.innerText = text;
+            container.appendChild(msg);
+            setTimeout(() => msg.remove(), 1500);
+        }
+
+        // 3. RE-ENABLE VAULT & SEARCH
+        onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
+            vaultCards = [];
+            snap.forEach(d => { if(d.data().quantity > 0) vaultCards.push(d.data()); });
+            filterVault();
+        });
+
+        window.filterVault = () => {
+            const grid = document.getElementById('vault-grid');
+            const search = document.getElementById('search-bar').value.toLowerCase();
+            
+            grid.innerHTML = vaultCards
+                .filter(c => c.name.toLowerCase().includes(search))
+                .map(c => `
+                    <div class="card-item" onclick="openDetail('${c.id}')">
+                        <img src="${c.img}" onerror="this.src='https://www.elestrals.com/images/cards/${c.id}.jpg'">
+                        <div style="font-size:0.75rem; margin-top:5px; color:var(--gold);">${c.name}</div>
+                        <div style="font-size:0.6rem;">x${c.quantity}</div>
+                    </div>
+                `).join('');
+        };
+
+        window.openDetail = (id) => {
+            const card = vaultCards.find(c => c.id === id);
+            if(!card) return;
+            document.getElementById('dt-img').src = card.img;
+            document.getElementById('dt-name').innerText = card.name;
+            document.getElementById('dt-price').innerText = "$" + (card.price || 0).toFixed(2);
+            document.getElementById('dt-qty').innerText = card.quantity;
+            document.getElementById('detail-view').style.display = "block";
+        };
+
+        window.closeDetail = () => document.getElementById('detail-view').style.display = "none";
+
         window.showView = (v) => {
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('nav span').forEach(el => el.classList.remove('active'));
             document.getElementById(`view-${v}`).classList.add('active');
             document.getElementById(`nav-${v}`).classList.add('active');
-        };
-
-        window.setFilter = (type, el) => {
-            currentFilter = type;
-            document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-            el.classList.add('active');
-            renderVault();
-        };
-
-        // --- MOCK SCAN ---
-        window.mockScan = async () => {
-            const id = "BT01-001";
-            await setDoc(doc(db, "users", USER_ID, "collection", id), {
-                id, name: "Adrestia", type: "Elestral", price: 15.40,
-                img: `https://collect.elestrals.com/assets/cards/${id}.png`,
-                quantity: increment(1)
-            }, { merge: true });
-            alert("Adrestia added!");
-        };
-
-        // --- EVENT DELEGATION FOR CLICKS ---
-        const grid = document.getElementById('collection-grid');
-        grid.addEventListener('click', (e) => {
-            const cardElement = e.target.closest('.card-item');
-            if (cardElement) {
-                const cardId = cardElement.getAttribute('data-id');
-                const card = vaultData.find(c => c.id === cardId);
-                if (card) openDetail(card);
-            }
-        });
-
-        window.openDetail = (card) => {
-            document.getElementById('dt-img').src = card.img;
-            document.getElementById('dt-name').innerText = card.name;
-            document.getElementById('dt-stats').innerText = `$${(card.price || 0).toFixed(2)} | Owned: ${card.quantity}`;
-            document.getElementById('detail-view').style.display = "block";
-        };
-
-        window.closeDetail = () => { document.getElementById('detail-view').style.display = "none"; };
-
-        // --- RENDER LOGIC ---
-        onSnapshot(collection(db, "users", USER_ID, "collection"), (snap) => {
-            vaultData = [];
-            snap.forEach(d => vaultData.push(d.data()));
-            renderVault();
-        });
-
-        window.renderVault = () => {
-            const search = document.getElementById('search').value.toLowerCase();
-            grid.innerHTML = vaultData
-                .filter(c => c.name.toLowerCase().includes(search) && (currentFilter === 'All' || c.type === currentFilter))
-                .map(c => `
-                    <div class="card-item" data-id="${c.id}">
-                        <img src="${c.img}">
-                        <div style="font-size:0.75rem; margin-top:5px; color:var(--gold); font-weight:bold;">${c.name}</div>
-                        <div style="font-size:0.6rem;">x${c.quantity}</div>
-                    </div>
-                `).join('');
         };
     </script>
 </body>
